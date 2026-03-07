@@ -24,6 +24,7 @@
 <div class="toolbar">
   <button id="reset">Réinitialiser</button>
   <button id="save-png">Télécharger PNG</button>
+  <button id="save-jpg">Télécharger JPG</button>
   <button id="save-svg">Télécharger SVG</button>
 </div>
 
@@ -169,6 +170,43 @@ document.addEventListener('DOMContentLoaded', function () {
     img.src = url;
   }
 
+  // Export JPG
+function downloadJPG(){
+  // On part du SVG courant, on rasterise sur Canvas puis on exporte en JPEG
+  var data = new XMLSerializer().serializeToString(svgEl);
+  var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  var img  = new Image();
+  img.onload = function(){
+    // Dimension : width/height du SVG, sinon la viewBox (fallback 1000x1000)
+    var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
+    var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
+    if (!w || !h) {
+      var vb = svgEl.getAttribute('viewBox');
+      if (vb) {
+        var p = vb.trim().split(/\s+/);
+        if (p.length === 4) { w = parseFloat(p[2]); h = parseFloat(p[3]); }
+      }
+    }
+    if (!w || !h) { w = 1000; h = 1000; }
+    var canvas = document.createElement('canvas');
+    canvas.width  = Math.round(w);
+    canvas.height = Math.round(h);
+    var ctx = canvas.getContext('2d');
+    // Fond blanc pour éviter la transparence (sinon fond noir/transparent selon le viewer)
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Dessine le SVG
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Qualité JPG (0.92 par défaut — tu peux mettre 1.0 pour max)
+    var jpg = canvas.toDataURL('image/jpeg', 0.92);
+    triggerDownload(jpg, 'logo_colore.jpg');
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = function(){ alert('Conversion JPG impossible.'); };
+  img.src = url;
+}
+  
   // Export SVG
   function downloadSVG(){
     var clone = svgEl.cloneNode(true);
@@ -193,9 +231,11 @@ document.addEventListener('DOMContentLoaded', function () {
     svgEl.addEventListener('click', onDotToggle);
     var btnReset = document.getElementById('reset');
     var btnPng   = document.getElementById('save-png');
+    var btnJpg   = document.getElementById('save-jpg');
     var btnSvg   = document.getElementById('save-svg');
     if (btnReset) btnReset.addEventListener('click', resetAll);
     if (btnPng)   btnPng.addEventListener('click', downloadPNG);
+    if (btnJpg)   btnJpg.addEventListener('click', downloadJPG);
     if (btnSvg)   btnSvg.addEventListener('click', downloadSVG);
     // Assurance : autoriser les interactions sur les éléments ciblés
     var style = document.createElement('style');
@@ -208,4 +248,5 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 </body>
+
 </html>
