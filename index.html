@@ -22,17 +22,14 @@
 <h1>Colorer les petits ronds (toggle)</h1>
 
 <div class="toolbar">
+  <label style="display:flex;align-items:center;gap:6px">
+  <input type="checkbox" id="transparent-bg" checked>
+  Fond transparent (PNG)
+</label>
   <button id="reset">Réinitialiser</button>
   <button id="save-png">Télécharger PNG</button>
   <button id="save-jpg">Télécharger JPG</button>
   <button id="save-svg">Télécharger SVG</button>
-  
-<label style="display:flex;align-items:center;gap:6px">
-  <input type="checkbox" id="transparent-bg" checked>
-  Fond transparent (PNG)
-</label>
-
-
 </div>
 
 <div id="stage">
@@ -148,29 +145,79 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Export PNG
-  function downloadPNG(){
+<script>
+// utilitaire: conversion couleur CSS -> #rrggbb
+function __toHex(c){ var cv=document.createElement('canvas').getContext('2d'); cv.fillStyle=c||''; return cv.fillStyle.toLowerCase(); }
+
+// utilitaire: supprime les "fonds" blancs du clone
+function __stripWhiteBackgroundRects(svgClone){
+  // 1) by color (fill = white)
+  svgClone.querySelectorAll('rect').forEach(function(r){
+    var fill = r.getAttribute('fill') || getComputedStyle(r).fill;
+    if (fill && (__toHex(fill) === '#ffffff' || fill.toLowerCase() === 'white')) {
+      r.parentNode && r.parentNode.removeChild(r);
+    }
+  });
+
+  // 2) by huge area (rects couvrant quasi tout le viewBox)
+  var vb = svgClone.getAttribute('viewBox');
+  if (vb){
+    var p = vb.trim().split(/\s+/).map(Number);
+    if (p.length===4){
+      var vbW = Math.abs(p[2]), vbH = Math.abs(p[3]), vbArea = vbW*vbH;
+      svgClone.querySelectorAll('rect').forEach(function(r){
+        try{
+          var bb = r.getBBox();
+          var area = bb.width * bb.height;
+          if (area > 0.9 * vbArea) { // >90% de la surface du viewBox => probable fond
+            r.parentNode && r.parentNode.removeChild(r);
+          }
+        }catch(e){}
+      });
+    }
+  }
+}
+
+function downloadPNG(){
   var transparent = document.getElementById('transparent-bg')?.checked !== false;
-  var data = new XMLSerializer().serializeToString(svgEl);
+
+  // 1) on clone le SVG courant
+  var clone = svgEl.cloneNode(true);
+
+  // 2) si transparent demandé, on enlève les "fonds" blancs
+  if (transparent) {
+    __stripWhiteBackgroundRects(clone);
+  }
+
+  // 3) sérialise le clone, pas l’original
+  var data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
   var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
   var url  = URL.createObjectURL(blob);
   var img  = new Image();
-  img.onload = function () {
+
+  img.onload = function(){
+    // Dimensions: width/height du SVG sinon viewBox (fallback 1000x1000)
     var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
     var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
     if (!w || !h) {
       var vb = svgEl.getAttribute('viewBox');
-      if (vb) { var p = vb.trim().split(/\s+/); if (p.length === 4) { w = parseFloat(p[2]); h = parseFloat(p[3]); } }
+      if (vb) { var p = vb.trim().split(/\s+/).map(Number); if (p.length===4) { w=p[2]; h=p[3]; } }
     }
     if (!w || !h) { w = 1000; h = 1000; }
+
     var canvas = document.createElement('canvas');
     canvas.width = Math.round(w);
     canvas.height = Math.round(h);
     var ctx = canvas.getContext('2d');
-    if (!transparent) {
-      // fond blanc si la case n’est PAS cochée
+
+    // IMPORTANT:
+    // - Si transparent==true : on NE PEINT PAS de fond -> alpha conservé
+    // - Si transparent==false : on peint un fond blanc (comportement original)
+    if (!transparent){
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0,0,canvas.width,canvas.height);
     }
+
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     var png = canvas.toDataURL('image/png');
     triggerDownload(png, 'logo_colore.png');
@@ -179,7 +226,7 @@ document.addEventListener('DOMContentLoaded', function () {
   img.onerror = function(){ alert('Conversion PNG impossible.'); };
   img.src = url;
 }
-
+</script>
   // Export JPG
 function downloadJPG(){
   // On part du SVG courant, on rasterise sur Canvas puis on exporte en JPEG
@@ -260,6 +307,7 @@ function downloadJPG(){
 </body>
 
 </html>
+
 
 
 
