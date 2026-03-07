@@ -5,13 +5,15 @@
 <title>Logo — petits ronds cliquables</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
-  body{font-family:Arial,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:24px}
+ body{font-family:Arial,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:24px}
   h1{font-size:20px;margin:0 0 12px}
   .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
   button{cursor:pointer;padding:8px 12px;border:1px solid #999;border-radius:6px;background:#f8f8f8}
   #stage{border:1px dashed #ccc;border-radius:8px;padding:12px;display:flex;justify-content:center;align-items:center;max-height:78vh;overflow:auto;background:#fff}
+  /* Surbrillance douce au survol */
   .dot.hover{outline:2px dashed rgba(88,38,244,.25); outline-offset:2px}
-  svg .dot{cursor:pointer}
+  /* Montre bien la main et autorise les interactions */
+  svg .dot{cursor:pointer; pointer-events: all;}
   .hint{color:#666;font-size:13px;margin-top:6px}
 </style>
 </head>
@@ -33,36 +35,38 @@
 
 <script>
 (function(){
+  // Couleurs de toggle
   const FILL_ON  = '#5826f4';
   const FILL_OFF = 'none';
 
-  const MIN_AREA = 150;   // area threshold to ignore very tiny artifacts
-  const MAX_AREA = 4200;  // area threshold to avoid big pictos/text paths
-  const TARGET_STROKE_HEX = '#5826f4';
+  // Seuils de surface (bbox) des éléments considérés "petits ronds"
+  const MIN_AREA = 80;     // un poil plus bas pour ne rien rater
+  const MAX_AREA = 12000;  // un peu plus haut si les ronds sont plus grands
+
+  // Couleur de référence présente dans le SVG
+  const VIOLET = '#5826f4';
 
   const stage = document.getElementById('stage');
   let svgEl = stage.querySelector('svg');
   let original = '';
 
-  if(!svgEl){
-    console.warn('SVG manquant dans #stage.');
-    return;
-  }
+  if(!svgEl){ console.warn('SVG manquant'); return; }
   if(!svgEl.id) svgEl.id = 'logo';
 
+  // Sauvegarde l'état d'origine (pour "Réinitialiser")
   function snapshotOriginal(){
-    try{ original = new XMLSerializer().serializeToString(svgEl); } catch(e){ original = ''; }
+    try { original = new XMLSerializer().serializeToString(svgEl); } catch(e){ original = ''; }
   }
 
-  function colorStringToHex(c){
+  // Convertit couleur CSS → #rrggbb minuscule (utile pour comparer)
+  function toHex(c){
     const ctx = document.createElement('canvas').getContext('2d');
-    ctx.fillStyle = c; return ctx.fillStyle.toLowerCase();
+    ctx.fillStyle = c;
+    return ctx.fillStyle.toLowerCase(); // renvoie #rrggbb
   }
-  function nearlySameColor(a,b){
-    const ha = a ? colorStringToHex(a) : ''; const hb = b ? colorStringToHex(b) : '';
-    return ha === hb;
-  }
+  function sameColor(a,b){ return toHex(a||'') === toHex(b||''); }
 
+  // Marque les "petits ronds" comme .dot (cliquables)
   function flagDots(){
     const nodes = svgEl.querySelectorAll('path, circle, ellipse');
     nodes.forEach(node => {
@@ -70,78 +74,104 @@
         const bb = node.getBBox();
         const area = bb.width * bb.height;
         if(area < MIN_AREA || area > MAX_AREA) return;
+
         const cs = getComputedStyle(node);
         const stroke = node.getAttribute('stroke') || cs.stroke;
         const fill   = node.getAttribute('fill')   || cs.fill;
-        const hasStroke = stroke && stroke !== 'none';
-        const isStrokeViolet = hasStroke && nearlySameColor(stroke, TARGET_STROKE_HEX);
-        const isFillNone = !fill || fill === 'none' || fill === 'transparent';
-        if(isStrokeViolet && isFillNone){
+
+        // Critères élargis :
+        // - petit élément
+        // - ET (stroke violet) OU (fill violet) OU (fill none)
+        const strokeViolet = stroke && stroke !== 'none' && sameColor(stroke, VIOLET);
+        const fillViolet   = fill   && fill   !== 'none' && sameColor(fill,   VIOLET);
+        const fillNone     = !fill || fill === 'none' || fill === 'transparent';
+
+        if (strokeViolet || fillViolet || fillNone) {
           node.classList.add('dot');
+          // garde les couleurs d'origine (reset ciblé si jamais)
           if(!node.hasAttribute('data-init-fill'))   node.setAttribute('data-init-fill',   node.getAttribute('fill')   ?? '');
           if(!node.hasAttribute('data-init-stroke')) node.setAttribute('data-init-stroke', node.getAttribute('stroke') ?? '');
+          // survol
           node.addEventListener('mouseenter', ()=> node.classList.add('hover'));
           node.addEventListener('mouseleave', ()=> node.classList.remove('hover'));
         }
-      }catch(e){ /* ignore nodes without bbox */ }
+      }catch(_e){ /* certains éléments peuvent ne pas avoir de bbox */ }
     });
   }
 
+  // Toggle au clic : fill none ↔ violet
   function onDotToggle(e){
     const t = e.target;
     if(!(t instanceof SVGElement)) return;
     if(!t.classList.contains('dot')) return;
+
     const currFill = t.getAttribute('fill') || getComputedStyle(t).fill;
     const isOff = !currFill || currFill === 'none' || currFill === 'transparent';
     t.setAttribute('fill', isOff ? FILL_ON : FILL_OFF);
   }
 
+  // Réinitialiser (revient à l’original)
   function resetAll(){
     if(original){
       const wrap = document.createElement('div');
       wrap.innerHTML = original;
       const fresh = wrap.querySelector('svg');
       if(fresh){
-        svgEl.replaceWith(fresh); svgEl = fresh; attach(); return;
+        svgEl.replaceWith(fresh);
+        svgEl = fresh;
+        attach();
+        return;
       }
     }
+    // Fallback : si snapshot indisponible, on remet les fills initiaux des .dot
     svgEl.querySelectorAll('.dot').forEach(n=>{
       const iniFill = n.getAttribute('data-init-fill');
       if(iniFill === null || iniFill === '') n.removeAttribute('fill'); else n.setAttribute('fill', iniFill);
     });
   }
 
+  // Export PNG
   function downloadPNG(){
     const data = new XMLSerializer().serializeToString(svgEl);
     const blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
     const url  = URL.createObjectURL(blob);
     const img  = new Image();
     img.onload = function(){
-      let w = svgEl.width?.baseVal?.value; let h = svgEl.height?.baseVal?.value;
-      if(!w || !h){ const vb = svgEl.getAttribute('viewBox'); if(vb){ const p = vb.split(/\s+/).map(Number); if(p.length===4){ w=p[2]; h=p[3]; } } }
+      let w = svgEl.width?.baseVal?.value, h = svgEl.height?.baseVal?.value;
+      if(!w || !h){
+        const vb = svgEl.getAttribute('viewBox');
+        if(vb){ const p = vb.split(/\s+/).map(Number); if(p.length===4){ w=p[2]; h=p[3]; } }
+      }
       if(!w || !h){ w=1000; h=1000; }
-      const canvas = document.createElement('canvas'); canvas.width = Math.round(w); canvas.height = Math.round(h);
-      const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(w); canvas.height = Math.round(h);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       const png = canvas.toDataURL('image/png');
       triggerDownload(png, 'logo_colore.png');
       URL.revokeObjectURL(url);
     };
-    img.onerror = ()=> alert('Conversion PNG impossible.');
+    img.onerror = ()=> alert('Conversion PNG impossible (ressources externes ?).');
     img.src = url;
   }
+
+  // Export SVG
   function downloadSVG(){
     const clone = svgEl.cloneNode(true);
-    clone.querySelectorAll('.dot').forEach(el=>{ el.classList.remove('dot','hover'); });
-    const xml = '<?xml version="1.0" encoding="UTF-8"?>
-' + new XMLSerializer().serializeToString(clone);
+    clone.querySelectorAll('.dot').forEach(el=> el.classList.remove('dot','hover'));
+    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
     const blob = new Blob([xml], {type:'image/svg+xml;charset=utf-8'});
     const url  = URL.createObjectURL(blob);
     triggerDownload(url, 'logo_colore.svg', true);
     URL.revokeObjectURL(url);
   }
-  function triggerDownload(href, filename, isURL=false){
-    const a = document.createElement('a'); a.href = href; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+
+  function triggerDownload(href, filename){
+    const a = document.createElement('a');
+    a.href = href; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
   }
+
   function attach(){
     snapshotOriginal();
     flagDots();
