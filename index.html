@@ -45,44 +45,70 @@ document.addEventListener('DOMContentLoaded', function () {
   var FILL_OFF = 'none';
 
   // Seuils de surface (bbox) pour “petits ronds”
-  var MIN_AREA = 80;      // assez bas pour ne rien rater
-  var MAX_AREA = 12000;   // assez haut pour couvrir les ronds de ton logo
-
+  var MIN_AREA = 80;
+  var MAX_AREA = 12000;
   var VIOLET = '#5826f4';
 
   var stage = document.getElementById('stage');
   if (!stage) return;
 
   var svgEl = stage.querySelector('svg');
-  if (!svgEl) return;               // sécurité si le SVG n'est pas inline
+  if (!svgEl) return;
   if (!svgEl.id) svgEl.id = 'logo';
 
   var original = '';
 
-  // Sauvegarde l'état d'origine (pour Réinitialiser)
+  // --- Utilitaires ---
   function snapshotOriginal() {
-    try {
-      original = new XMLSerializer().serializeToString(svgEl);
-    } catch (e) {
-      original = '';
-    }
+    try { original = new XMLSerializer().serializeToString(svgEl); }
+    catch (e) { original = ''; }
   }
-
-  // Convertit couleur CSS -> #rrggbb minuscule
-  function toHex(c) {
+  function toHex(c){
     var canvas = document.createElement('canvas');
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = c || '';
-    return ctx.fillStyle.toLowerCase(); // renvoie #rrggbb ou "" si invalide
+    return ctx.fillStyle.toLowerCase(); // "#rrggbb" ou ""
   }
-  function sameColor(a, b) { return toHex(a) === toHex(b); }
+  function sameColor(a,b){ return toHex(a) === toHex(b); }
 
-  // Marque les “petits ronds” comme .dot (cliquables)
+  // Retire les grands <rect> blancs du CLONE pour export transparent
+  function stripWhiteBackgroundRects(svgClone){
+    // 1) par couleur (fill=white)
+    var rects = svgClone.querySelectorAll('rect');
+    for (var i=0; i<rects.length; i++){
+      var r = rects[i];
+      var fillAttr = r.getAttribute('fill');
+      if (fillAttr && toHex(fillAttr) === '#ffffff'){
+        r.parentNode && r.parentNode.removeChild(r);
+      }
+    }
+    // 2) par surface géante (≈ viewBox)
+    var vb = svgClone.getAttribute('viewBox');
+    if (vb){
+      var p = vb.trim().split(/\s+/);
+      if (p.length === 4){
+        var vbW = Math.abs(parseFloat(p[2])), vbH = Math.abs(parseFloat(p[3]));
+        var vbArea = vbW * vbH;
+        var rects2 = svgClone.querySelectorAll('rect');
+        for (var j=0; j<rects2.length; j++){
+          try{
+            var bb = rects2[j].getBBox();
+            var area = bb.width * bb.height;
+            if (area > 0.9 * vbArea){
+              rects2[j].parentNode && rects2[j].parentNode.removeChild(rects2[j]);
+            }
+          }catch(e){}
+        }
+      }
+    }
+  }
+
+  // --- Détection des “petits ronds” ---
   function flagDots() {
     var nodes = svgEl.querySelectorAll('path, circle, ellipse');
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
-      try {
+      try{
         var bb = node.getBBox();
         var area = bb.width * bb.height;
         if (area < MIN_AREA || area > MAX_AREA) continue;
@@ -91,40 +117,34 @@ document.addEventListener('DOMContentLoaded', function () {
         var stroke = node.getAttribute('stroke') || cs.stroke;
         var fill   = node.getAttribute('fill')   || cs.fill;
 
-        // Critères élargis : petit + (stroke violet) OU (fill violet) OU (fill none)
         var strokeViolet = stroke && stroke !== 'none' && sameColor(stroke, VIOLET);
         var fillViolet   = fill   && fill   !== 'none' && sameColor(fill,   VIOLET);
         var fillNone     = !fill || fill === 'none' || fill === 'transparent';
 
         if (strokeViolet || fillViolet || fillNone) {
           node.classList.add('dot');
-          // garde les couleurs d'origine (reset ciblé si jamais)
           if (!node.hasAttribute('data-init-fill'))   node.setAttribute('data-init-fill',   node.getAttribute('fill')   || '');
           if (!node.hasAttribute('data-init-stroke')) node.setAttribute('data-init-stroke', node.getAttribute('stroke') || '');
-          // survol
           node.addEventListener('mouseenter', function(){ this.classList.add('hover'); });
           node.addEventListener('mouseleave', function(){ this.classList.remove('hover'); });
         }
-      } catch(e) {
-        // certains éléments peuvent ne pas avoir de bbox (on ignore)
-      }
+      }catch(e){}
     }
   }
 
-  // Toggle : fill none ↔ violet
+  // --- Toggle au clic ---
   function onDotToggle(e) {
     var t = e.target;
     if (!(t instanceof SVGElement)) return;
     if (!t.classList.contains('dot')) return;
-
     var currFill = t.getAttribute('fill') || window.getComputedStyle(t).fill;
     var isOff = !currFill || currFill === 'none' || currFill === 'transparent';
     t.setAttribute('fill', isOff ? FILL_ON : FILL_OFF);
   }
 
-  // Réinitialiser (revient à l’original)
+  // --- Réinitialiser ---
   function resetAll(){
-    if (original) {
+    if (original){
       var wrap = document.createElement('div');
       wrap.innerHTML = original;
       var fresh = wrap.querySelector('svg');
@@ -135,134 +155,96 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
     }
-    // Fallback : si snapshot indisponible
+    // Fallback
     var dots = svgEl.querySelectorAll('.dot');
-    for (var i = 0; i < dots.length; i++) {
+    for (var i=0; i<dots.length; i++){
       var n = dots[i];
       var iniFill = n.getAttribute('data-init-fill');
-      if (iniFill === null || iniFill === '') n.removeAttribute('fill'); else n.setAttribute('fill', iniFill);
+      if (iniFill === null || iniFill === '') n.removeAttribute('fill');
+      else n.setAttribute('fill', iniFill);
     }
   }
 
-  // Export PNG
-// utilitaire: conversion couleur CSS -> #rrggbb
-function __toHex(c){ var cv=document.createElement('canvas').getContext('2d'); cv.fillStyle=c||''; return cv.fillStyle.toLowerCase(); }
+  // --- Export PNG (transparent si case cochée) ---
+  function downloadPNG(){
+    // pas d'opérateur "?.", pour compat maximum
+    var chk = document.getElementById('transparent-bg');
+    var transparent = !chk || chk.checked; // si case absente, on exporte transparent par défaut
 
-// utilitaire: supprime les "fonds" blancs du clone
-function __stripWhiteBackgroundRects(svgClone){
-  // 1) by color (fill = white)
-  svgClone.querySelectorAll('rect').forEach(function(r){
-    var fill = r.getAttribute('fill') || getComputedStyle(r).fill;
-    if (fill && (__toHex(fill) === '#ffffff' || fill.toLowerCase() === 'white')) {
-      r.parentNode && r.parentNode.removeChild(r);
-    }
-  });
+    // 1) clone
+    var clone = svgEl.cloneNode(true);
+    // 2) si transparent demandé, retire les <rect> blancs
+    if (transparent) stripWhiteBackgroundRects(clone);
 
-  // 2) by huge area (rects couvrant quasi tout le viewBox)
-  var vb = svgClone.getAttribute('viewBox');
-  if (vb){
-    var p = vb.trim().split(/\s+/).map(Number);
-    if (p.length===4){
-      var vbW = Math.abs(p[2]), vbH = Math.abs(p[3]), vbArea = vbW*vbH;
-      svgClone.querySelectorAll('rect').forEach(function(r){
-        try{
-          var bb = r.getBBox();
-          var area = bb.width * bb.height;
-          if (area > 0.9 * vbArea) { // >90% de la surface du viewBox => probable fond
-            r.parentNode && r.parentNode.removeChild(r);
-          }
-        }catch(e){}
-      });
-    }
+    // 3) sérialise le clone
+    var data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
+    var url  = URL.createObjectURL(blob);
+    var img  = new Image();
+
+    img.onload = function(){
+      var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
+      var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
+      if (!w || !h) {
+        var vb = svgEl.getAttribute('viewBox');
+        if (vb) { var p = vb.trim().split(/\s+/); if (p.length===4){ w=parseFloat(p[2]); h=parseFloat(p[3]); } }
+      }
+      if (!w || !h){ w = 1000; h = 1000; }
+
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.round(w);
+      canvas.height = Math.round(h);
+      var ctx = canvas.getContext('2d');
+
+      // Si transparent=false, on peint un fond blanc
+      if (!transparent){
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      var png = canvas.toDataURL('image/png');
+      triggerDownload(png, 'logo_colore.png');
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = function(){ alert('Conversion PNG impossible.'); };
+    img.src = url;
   }
-}
 
-function downloadPNG(){
-  var transparent = document.getElementById('transparent-bg')?.checked !== false;
+  // --- Export JPG (toujours fond plein) ---
+  function downloadJPG(){
+    var data = new XMLSerializer().serializeToString(svgEl);
+    var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
+    var url  = URL.createObjectURL(blob);
+    var img  = new Image();
+    img.onload = function(){
+      var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
+      var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
+      if (!w || !h) {
+        var vb = svgEl.getAttribute('viewBox');
+        if (vb) { var p = vb.trim().split(/\s+/); if (p.length===4){ w=parseFloat(p[2]); h=parseFloat(p[3]); } }
+      }
+      if (!w || !h){ w = 1000; h = 1000; }
 
-  // 1) on clone le SVG courant
-  var clone = svgEl.cloneNode(true);
+      var canvas = document.createElement('canvas');
+      canvas.width  = Math.round(w);
+      canvas.height = Math.round(h);
+      var ctx = canvas.getContext('2d');
 
-  // 2) si transparent demandé, on enlève les "fonds" blancs
-  if (transparent) {
-    __stripWhiteBackgroundRects(clone);
-  }
-
-  // 3) sérialise le clone, pas l’original
-  var data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
-  var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
-  var url  = URL.createObjectURL(blob);
-  var img  = new Image();
-
-  img.onload = function(){
-    // Dimensions: width/height du SVG sinon viewBox (fallback 1000x1000)
-    var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
-    var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
-    if (!w || !h) {
-      var vb = svgEl.getAttribute('viewBox');
-      if (vb) { var p = vb.trim().split(/\s+/).map(Number); if (p.length===4) { w=p[2]; h=p[3]; } }
-    }
-    if (!w || !h) { w = 1000; h = 1000; }
-
-    var canvas = document.createElement('canvas');
-    canvas.width = Math.round(w);
-    canvas.height = Math.round(h);
-    var ctx = canvas.getContext('2d');
-
-    // IMPORTANT:
-    // - Si transparent==true : on NE PEINT PAS de fond -> alpha conservé
-    // - Si transparent==false : on peint un fond blanc (comportement original)
-    if (!transparent){
+      // fond blanc
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0,0,canvas.width,canvas.height);
-    }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    var png = canvas.toDataURL('image/png');
-    triggerDownload(png, 'logo_colore.png');
-    URL.revokeObjectURL(url);
-  };
-  img.onerror = function(){ alert('Conversion PNG impossible.'); };
-  img.src = url;
-}
-  // Export JPG
-function downloadJPG(){
-  // On part du SVG courant, on rasterise sur Canvas puis on exporte en JPEG
-  var data = new XMLSerializer().serializeToString(svgEl);
-  var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
-  var url  = URL.createObjectURL(blob);
-  var img  = new Image();
-  img.onload = function(){
-    // Dimension : width/height du SVG, sinon la viewBox (fallback 1000x1000)
-    var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
-    var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
-    if (!w || !h) {
-      var vb = svgEl.getAttribute('viewBox');
-      if (vb) {
-        var p = vb.trim().split(/\s+/);
-        if (p.length === 4) { w = parseFloat(p[2]); h = parseFloat(p[3]); }
-      }
-    }
-    if (!w || !h) { w = 1000; h = 1000; }
-    var canvas = document.createElement('canvas');
-    canvas.width  = Math.round(w);
-    canvas.height = Math.round(h);
-    var ctx = canvas.getContext('2d');
-    // Fond blanc pour éviter la transparence (sinon fond noir/transparent selon le viewer)
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // Dessine le SVG
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    // Qualité JPG (0.92 par défaut — tu peux mettre 1.0 pour max)
-    var jpg = canvas.toDataURL('image/jpeg', 0.92);
-    triggerDownload(jpg, 'logo_colore.jpg');
-    URL.revokeObjectURL(url);
-  };
-  img.onerror = function(){ alert('Conversion JPG impossible.'); };
-  img.src = url;
-}
-  
-  // Export SVG
+      var jpg = canvas.toDataURL('image/jpeg', 0.92);
+      triggerDownload(jpg, 'logo_colore.jpg');
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = function(){ alert('Conversion JPG impossible.'); };
+    img.src = url;
+  }
+
+  // --- Export SVG (nettoyé des classes .dot/.hover) ---
   function downloadSVG(){
     var clone = svgEl.cloneNode(true);
     var dots = clone.querySelectorAll('.dot');
@@ -284,14 +266,17 @@ function downloadJPG(){
     snapshotOriginal();
     flagDots();
     svgEl.addEventListener('click', onDotToggle);
+
     var btnReset = document.getElementById('reset');
     var btnPng   = document.getElementById('save-png');
     var btnJpg   = document.getElementById('save-jpg');
     var btnSvg   = document.getElementById('save-svg');
+
     if (btnReset) btnReset.addEventListener('click', resetAll);
     if (btnPng)   btnPng.addEventListener('click', downloadPNG);
     if (btnJpg)   btnJpg.addEventListener('click', downloadJPG);
     if (btnSvg)   btnSvg.addEventListener('click', downloadSVG);
+
     // Assurance : autoriser les interactions sur les éléments ciblés
     var style = document.createElement('style');
     style.textContent = 'svg .dot{cursor:pointer;pointer-events:all}';
@@ -305,6 +290,7 @@ function downloadJPG(){
 </body>
 
 </html>
+
 
 
 
