@@ -22,10 +22,19 @@
 <h1>Colorer les petits ronds (toggle)</h1>
 
 <div class="toolbar">
+ <!-- NOUVEAU : menu déroulant des couleurs autorisées -->
   <label style="display:flex;align-items:center;gap:6px">
-  <input type="checkbox" id="transparent-bg" checked>
-  Fond transparent (PNG)
-</label>
+    <span>Couleur du logo</span>
+    <select id="theme-select">
+      <option value="#000000">Noir (#000000)</option>
+      <option value="#08babe" selected>Bleu sarcelle (#08babe)</option>
+      <option value="#ffffff">Blanc (#ffffff)</option>
+    </select>
+  </label>
+  <label style="display:flex;align-items:center;gap:6px">
+    <input type="checkbox" id="transparent-bg" checked>
+    Fond transparent (PNG)
+  </label>
   <button id="reset">Réinitialiser</button>
   <button id="save-png">Télécharger PNG</button>
   <button id="save-jpg">Télécharger JPG</button>
@@ -41,13 +50,15 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   // === Paramètres ===
-  var FILL_ON  = '#5826f4';
+  var FILL_ON  = '#5826f4';  // sera synchronisé avec la couleur "thème"
   var FILL_OFF = 'none';
+  var THEME    = '#5826f4';  // couleur "thème" courante
+  // Palette autorisée uniquement
+  var ALLOWED_COLORS = ['#000000', '#08babe', '#ffffff'];
 
   // Seuils de surface (bbox) pour “petits ronds”
   var MIN_AREA = 80;
   var MAX_AREA = 12000;
-  var VIOLET = '#5826f4';
 
   var stage = document.getElementById('stage');
   if (!stage) return;
@@ -71,7 +82,14 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   function sameColor(a,b){ return toHex(a) === toHex(b); }
 
-  // Retire les grands <rect> blancs du CLONE pour export transparent
+  // Vrai si c est la couleur thème actuelle OU l'ancien violet (#5826f4)
+  function isThemedColor(c) {
+    if (!c) return false;
+    var h = toHex(c);
+    return h === toHex(THEME) || h === toHex('#5826f4');
+  }
+
+  // Retire les grands <rect> blancs du CLONE pour export PNG transparent
   function stripWhiteBackgroundRects(svgClone){
     // 1) par couleur (fill=white)
     var rects = svgClone.querySelectorAll('rect');
@@ -103,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // --- Détection des “petits ronds” ---
+  // --- Détection des “petits ronds” (cliquables) ---
   function flagDots() {
     var nodes = svgEl.querySelectorAll('path, circle, ellipse');
     for (var i = 0; i < nodes.length; i++) {
@@ -117,11 +135,12 @@ document.addEventListener('DOMContentLoaded', function () {
         var stroke = node.getAttribute('stroke') || cs.stroke;
         var fill   = node.getAttribute('fill')   || cs.fill;
 
-        var strokeViolet = stroke && stroke !== 'none' && sameColor(stroke, VIOLET);
-        var fillViolet   = fill   && fill   !== 'none' && sameColor(fill,   VIOLET);
+        // ⬇️ au lieu de comparer au "violet" fixe, on compare à la "couleur thème"
+        var strokeThemed = stroke && stroke !== 'none' && isThemedColor(stroke);
+        var fillThemed   = fill   && fill   !== 'none' && isThemedColor(fill);
         var fillNone     = !fill || fill === 'none' || fill === 'transparent';
 
-        if (strokeViolet || fillViolet || fillNone) {
+        if (strokeThemed || fillThemed || fillNone) {
           node.classList.add('dot');
           if (!node.hasAttribute('data-init-fill'))   node.setAttribute('data-init-fill',   node.getAttribute('fill')   || '');
           if (!node.hasAttribute('data-init-stroke')) node.setAttribute('data-init-stroke', node.getAttribute('stroke') || '');
@@ -132,7 +151,64 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // --- Toggle au clic ---
+  // --- Re-thématisation : applique "hex" à tout le logo qui est "dans le thème" ---
+  function applyThemeColor(hex){
+    // Normalise + vérifie palette autorisée
+    var wanted = toHex(hex);
+    if (ALLOWED_COLORS.indexOf(wanted) === -1) {
+      return; // couleur refusée
+    }
+
+    // 1) Met à jour THEME et la couleur de toggle (ronds)
+    THEME   = wanted;
+    FILL_ON = wanted;
+
+    // 2) Parcourt tous les éléments graphiques
+    var nodes = svgEl.querySelectorAll('*');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!(el instanceof SVGElement)) continue;
+
+      // ne pas toucher aux grands fonds blancs; ils sont gérés à l’export PNG
+      if (el.tagName && el.tagName.toLowerCase() === 'rect') {
+        var f = el.getAttribute('fill');
+        if (f && toHex(f) === '#ffffff') continue;
+      }
+
+      // stroke
+      var strokeAttr = el.getAttribute('stroke');
+      if (strokeAttr && strokeAttr !== 'none' && isThemedColor(strokeAttr)) {
+        el.setAttribute('stroke', THEME);
+      } else if (!strokeAttr) {
+        var cs = window.getComputedStyle(el);
+        if (cs && cs.stroke && cs.stroke !== 'none' && isThemedColor(cs.stroke)) {
+          el.setAttribute('stroke', THEME);
+        }
+      }
+
+      // fill
+      var fillAttr = el.getAttribute('fill');
+      if (fillAttr && fillAttr !== 'none' && isThemedColor(fillAttr)) {
+        el.setAttribute('fill', THEME);
+      } else if (!fillAttr) {
+        var csf = window.getComputedStyle(el);
+        if (csf && csf.fill && csf.fill !== 'none' && isThemedColor(csf.fill)) {
+          el.setAttribute('fill', THEME);
+        }
+      }
+    }
+
+    // 3) Adapter la surbrillance hover à la nouvelle couleur
+    var style = document.getElementById('theme-outline-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'theme-outline-style';
+      document.head.appendChild(style);
+    }
+    style.textContent = '.dot.hover{outline:2px dashed ' + THEME + '40; outline-offset:2px}';
+  }
+
+  // --- Toggle au clic (remplissage des ronds) ---
   function onDotToggle(e) {
     var t = e.target;
     if (!(t instanceof SVGElement)) return;
@@ -151,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (fresh){
         svgEl.replaceWith(fresh);
         svgEl = fresh;
-        attach();
+        attach();   // rebranche tout (thème, listeners, etc.)
         return;
       }
     }
@@ -167,16 +243,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // --- Export PNG (transparent si case cochée) ---
   function downloadPNG(){
-    // pas d'opérateur "?.", pour compat maximum
     var chk = document.getElementById('transparent-bg');
-    var transparent = !chk || chk.checked; // si case absente, on exporte transparent par défaut
+    var transparent = !chk || chk.checked;
 
-    // 1) clone
     var clone = svgEl.cloneNode(true);
-    // 2) si transparent demandé, retire les <rect> blancs
     if (transparent) stripWhiteBackgroundRects(clone);
 
-    // 3) sérialise le clone
     var data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
     var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
     var url  = URL.createObjectURL(blob);
@@ -196,7 +268,6 @@ document.addEventListener('DOMContentLoaded', function () {
       canvas.height = Math.round(h);
       var ctx = canvas.getContext('2d');
 
-      // Si transparent=false, on peint un fond blanc
       if (!transparent){
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -271,11 +342,20 @@ document.addEventListener('DOMContentLoaded', function () {
     var btnPng   = document.getElementById('save-png');
     var btnJpg   = document.getElementById('save-jpg');
     var btnSvg   = document.getElementById('save-svg');
+    var sel      = document.getElementById('theme-select'); // ⬅️ menu couleurs
 
     if (btnReset) btnReset.addEventListener('click', resetAll);
     if (btnPng)   btnPng.addEventListener('click', downloadPNG);
     if (btnJpg)   btnJpg.addEventListener('click', downloadJPG);
     if (btnSvg)   btnSvg.addEventListener('click', downloadSVG);
+
+    // Lier le menu et appliquer la couleur choisie au chargement
+    if (sel) {
+      sel.addEventListener('change', function(){
+        applyThemeColor(this.value);  // uniquement si la valeur est autorisée
+      });
+      applyThemeColor(sel.value);     // applique la valeur par défaut du <select>
+    }
 
     // Assurance : autoriser les interactions sur les éléments ciblés
     var style = document.createElement('style');
@@ -290,6 +370,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </body>
 
 </html>
+
 
 
 
