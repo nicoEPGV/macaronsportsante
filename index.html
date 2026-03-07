@@ -23,6 +23,11 @@
 
 <div class="toolbar">
   <button id="reset">Réinitialiser</button>
+  
+<label style="display:flex;align-items:center;gap:6px">
+  <input type="checkbox" id="transparent-bg" checked>
+  Fond transparent (PNG)
+</label>
   <button id="save-png">Télécharger PNG</button>
   <button id="save-jpg">Télécharger JPG</button>
   <button id="save-svg">Télécharger SVG</button>
@@ -142,33 +147,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Export PNG
   function downloadPNG(){
-    var data = new XMLSerializer().serializeToString(svgEl);
-    var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
-    var url  = URL.createObjectURL(blob);
-    var img  = new Image();
-    img.onload = function(){
-      var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
-      var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
-      if (!w || !h) {
-        var vb = svgEl.getAttribute('viewBox');
-        if (vb) {
-          var p = vb.trim().split(/\s+/);
-          if (p.length===4) { w = parseFloat(p[2]); h = parseFloat(p[3]); }
-        }
-      }
-      if (!w || !h) { w = 1000; h = 1000; }
-      var canvas = document.createElement('canvas');
-      canvas.width = Math.round(w);
-      canvas.height = Math.round(h);
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      var png = canvas.toDataURL('image/png');
-      triggerDownload(png, 'logo_colore.png');
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = function(){ alert('Conversion PNG impossible.'); };
-    img.src = url;
-  }
+  var transparent = document.getElementById('transparent-bg')?.checked !== false;
+  var data = new XMLSerializer().serializeToString(svgEl);
+  var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  var img  = new Image();
+  img.onload = function () {
+    var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
+    var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
+    if (!w || !h) {
+      var vb = svgEl.getAttribute('viewBox');
+      if (vb) { var p = vb.trim().split(/\s+/); if (p.length === 4) { w = parseFloat(p[2]); h = parseFloat(p[3]); } }
+    }
+    if (!w || !h) { w = 1000; h = 1000; }
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(w);
+    canvas.height = Math.round(h);
+    var ctx = canvas.getContext('2d');
+    if (!transparent) {
+      // fond blanc si la case n’est PAS cochée
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    var png = canvas.toDataURL('image/png');
+    triggerDownload(png, 'logo_colore.png');
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = function(){ alert('Conversion PNG impossible.'); };
+  img.src = url;
+}
 
   // Export JPG
 function downloadJPG(){
@@ -250,3 +258,4 @@ function downloadJPG(){
 </body>
 
 </html>
+
