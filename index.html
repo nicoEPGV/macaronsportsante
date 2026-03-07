@@ -27,8 +27,9 @@
   <label style="display:flex;align-items:center;gap:6px">
     <span>Couleur à l’export</span>
     <select id="export-color">
+      <option value="#5826f4" selected>Violet (#5826f4)</option>
       <option value="#000000">Noir (#000000)</option>
-      <option value="#08babe" selected>Bleu sarcelle (#08babe)</option>
+      <option value="#08babe">Bleu sarcelle (#08babe)</option>
       <option value="#ffffff">Blanc (#ffffff)</option>
     </select>
   </label>
@@ -56,8 +57,8 @@ document.addEventListener('DOMContentLoaded', function () {
   var FILL_OFF = 'none';
   var THEME    = '#5826f4';  // couleur “thème” visible à l’écran (ne change plus)
   // Palette autorisée uniquement pour l'export
-  var ALLOWED_COLORS = ['#000000', '#08babe', '#ffffff'];
-  var EXPORT_COLOR = '#08babe'; // valeur par défaut (menu)
+  var ALLOWED_COLORS = ['#000000', '#08babe', '#ffffff', '#5826f4'];
+  var EXPORT_COLOR = '#5826f4'; // valeur par défaut (menu)
 
   // Seuils de surface (bbox) pour “petits ronds”
   var MIN_AREA = 80;
@@ -356,6 +357,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </body>
 
 </html>
+
 
 
 
