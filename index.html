@@ -33,156 +33,177 @@
 
 <p class="hint">Clique sur un petit rond pour le <b>remplir</b> en <code>#5826f4</code>, re-clique pour le remettre <b>transparent</b>. Seuls les petits ronds sont modifiables.</p>
 
-<script>
-(function(){
-  // Couleurs de toggle
-  const FILL_ON  = '#5826f4';
-  const FILL_OFF = 'none';
+</script>
+document.addEventListener('DOMContentLoaded', function () {
+  // === Paramètres ===
+  var FILL_ON  = '#5826f4';
+  var FILL_OFF = 'none';
 
-  // Seuils de surface (bbox) des éléments considérés "petits ronds"
-  const MIN_AREA = 80;     // un poil plus bas pour ne rien rater
-  const MAX_AREA = 12000;  // un peu plus haut si les ronds sont plus grands
+  // Seuils de surface (bbox) pour “petits ronds”
+  var MIN_AREA = 80;      // assez bas pour ne rien rater
+  var MAX_AREA = 12000;   // assez haut pour couvrir les ronds de ton logo
 
-  // Couleur de référence présente dans le SVG
-  const VIOLET = '#5826f4';
+  var VIOLET = '#5826f4';
 
-  const stage = document.getElementById('stage');
-  let svgEl = stage.querySelector('svg');
-  let original = '';
+  var stage = document.getElementById('stage');
+  if (!stage) return;
 
-  if(!svgEl){ console.warn('SVG manquant'); return; }
-  if(!svgEl.id) svgEl.id = 'logo';
+  var svgEl = stage.querySelector('svg');
+  if (!svgEl) return;               // sécurité si le SVG n'est pas inline
+  if (!svgEl.id) svgEl.id = 'logo';
 
-  // Sauvegarde l'état d'origine (pour "Réinitialiser")
-  function snapshotOriginal(){
-    try { original = new XMLSerializer().serializeToString(svgEl); } catch(e){ original = ''; }
+  var original = '';
+
+  // Sauvegarde l'état d'origine (pour Réinitialiser)
+  function snapshotOriginal() {
+    try {
+      original = new XMLSerializer().serializeToString(svgEl);
+    } catch (e) {
+      original = '';
+    }
   }
 
-  // Convertit couleur CSS → #rrggbb minuscule (utile pour comparer)
-  function toHex(c){
-    const ctx = document.createElement('canvas').getContext('2d');
-    ctx.fillStyle = c;
-    return ctx.fillStyle.toLowerCase(); // renvoie #rrggbb
+  // Convertit couleur CSS -> #rrggbb minuscule
+  function toHex(c) {
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = c || '';
+    return ctx.fillStyle.toLowerCase(); // renvoie #rrggbb ou "" si invalide
   }
-  function sameColor(a,b){ return toHex(a||'') === toHex(b||''); }
+  function sameColor(a, b) { return toHex(a) === toHex(b); }
 
-  // Marque les "petits ronds" comme .dot (cliquables)
-  function flagDots(){
-    const nodes = svgEl.querySelectorAll('path, circle, ellipse');
-    nodes.forEach(node => {
-      try{
-        const bb = node.getBBox();
-        const area = bb.width * bb.height;
-        if(area < MIN_AREA || area > MAX_AREA) return;
+  // Marque les “petits ronds” comme .dot (cliquables)
+  function flagDots() {
+    var nodes = svgEl.querySelectorAll('path, circle, ellipse');
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      try {
+        var bb = node.getBBox();
+        var area = bb.width * bb.height;
+        if (area < MIN_AREA || area > MAX_AREA) continue;
 
-        const cs = getComputedStyle(node);
-        const stroke = node.getAttribute('stroke') || cs.stroke;
-        const fill   = node.getAttribute('fill')   || cs.fill;
+        var cs = window.getComputedStyle(node);
+        var stroke = node.getAttribute('stroke') || cs.stroke;
+        var fill   = node.getAttribute('fill')   || cs.fill;
 
-        // Critères élargis :
-        // - petit élément
-        // - ET (stroke violet) OU (fill violet) OU (fill none)
-        const strokeViolet = stroke && stroke !== 'none' && sameColor(stroke, VIOLET);
-        const fillViolet   = fill   && fill   !== 'none' && sameColor(fill,   VIOLET);
-        const fillNone     = !fill || fill === 'none' || fill === 'transparent';
+        // Critères élargis : petit + (stroke violet) OU (fill violet) OU (fill none)
+        var strokeViolet = stroke && stroke !== 'none' && sameColor(stroke, VIOLET);
+        var fillViolet   = fill   && fill   !== 'none' && sameColor(fill,   VIOLET);
+        var fillNone     = !fill || fill === 'none' || fill === 'transparent';
 
         if (strokeViolet || fillViolet || fillNone) {
           node.classList.add('dot');
-          // garde les couleurs d'origine (reset ciblé si jamais)
-          if(!node.hasAttribute('data-init-fill'))   node.setAttribute('data-init-fill',   node.getAttribute('fill')   ?? '');
-          if(!node.hasAttribute('data-init-stroke')) node.setAttribute('data-init-stroke', node.getAttribute('stroke') ?? '');
-          // survol
-          node.addEventListener('mouseenter', ()=> node.classList.add('hover'));
-          node.addEventListener('mouseleave', ()=> node.classList.remove('hover'));
+          if (!node.hasAttribute('data-init-fill'))   node.setAttribute('data-init-fill',   node.getAttribute('fill')   || '');
+          if (!node.hasAttribute('data-init-stroke')) node.setAttribute('data-init-stroke', node.getAttribute('stroke') || '');
+          node.addEventListener('mouseenter', function(){ this.classList.add('hover'); });
+          node.addEventListener('mouseleave', function(){ this.classList.remove('hover'); });
         }
-      }catch(_e){ /* certains éléments peuvent ne pas avoir de bbox */ }
-    });
+      } catch (e) {
+        // Certains éléments peuvent ne pas avoir de bbox (on ignore)
+      }
+    }
   }
 
-  // Toggle au clic : fill none ↔ violet
-  function onDotToggle(e){
-    const t = e.target;
-    if(!(t instanceof SVGElement)) return;
-    if(!t.classList.contains('dot')) return;
+  // Toggle : fill none ↔ violet
+  function onDotToggle(e) {
+    var t = e.target;
+    if (!(t instanceof SVGElement)) return;
+    if (!t.classList.contains('dot')) return;
 
-    const currFill = t.getAttribute('fill') || getComputedStyle(t).fill;
-    const isOff = !currFill || currFill === 'none' || currFill === 'transparent';
+    var currFill = t.getAttribute('fill') || window.getComputedStyle(t).fill;
+    var isOff = !currFill || currFill === 'none' || currFill === 'transparent';
     t.setAttribute('fill', isOff ? FILL_ON : FILL_OFF);
   }
 
-  // Réinitialiser (revient à l’original)
-  function resetAll(){
-    if(original){
-      const wrap = document.createElement('div');
+  function resetAll() {
+    if (original) {
+      var wrap = document.createElement('div');
       wrap.innerHTML = original;
-      const fresh = wrap.querySelector('svg');
-      if(fresh){
+      var fresh = wrap.querySelector('svg');
+      if (fresh) {
         svgEl.replaceWith(fresh);
         svgEl = fresh;
         attach();
         return;
       }
     }
-    // Fallback : si snapshot indisponible, on remet les fills initiaux des .dot
-    svgEl.querySelectorAll('.dot').forEach(n=>{
-      const iniFill = n.getAttribute('data-init-fill');
-      if(iniFill === null || iniFill === '') n.removeAttribute('fill'); else n.setAttribute('fill', iniFill);
-    });
+    // Fallback si snapshot indisponible
+    var dots = svgEl.querySelectorAll('.dot');
+    for (var i = 0; i < dots.length; i++) {
+      var n = dots[i];
+      var iniFill = n.getAttribute('data-init-fill');
+      if (iniFill === null || iniFill === '') n.removeAttribute('fill');
+      else n.setAttribute('fill', iniFill);
+    }
   }
 
-  // Export PNG
-  function downloadPNG(){
-    const data = new XMLSerializer().serializeToString(svgEl);
-    const blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
-    const url  = URL.createObjectURL(blob);
-    const img  = new Image();
-    img.onload = function(){
-      let w = svgEl.width?.baseVal?.value, h = svgEl.height?.baseVal?.value;
-      if(!w || !h){
-        const vb = svgEl.getAttribute('viewBox');
-        if(vb){ const p = vb.split(/\s+/).map(Number); if(p.length===4){ w=p[2]; h=p[3]; } }
+  function downloadPNG() {
+    var data = new XMLSerializer().serializeToString(svgEl);
+    var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
+    var url  = URL.createObjectURL(blob);
+    var img  = new Image();
+    img.onload = function () {
+      var w = (svgEl.width && svgEl.width.baseVal && svgEl.width.baseVal.value) ? svgEl.width.baseVal.value : null;
+      var h = (svgEl.height && svgEl.height.baseVal && svgEl.height.baseVal.value) ? svgEl.height.baseVal.value : null;
+      if (!w || !h) {
+        var vb = svgEl.getAttribute('viewBox');
+        if (vb) {
+          var p = vb.trim().split(/\s+/);
+          if (p.length === 4) { w = parseFloat(p[2]); h = parseFloat(p[3]); }
+        }
       }
-      if(!w || !h){ w=1000; h=1000; }
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(w); canvas.height = Math.round(h);
-      const ctx = canvas.getContext('2d');
+      if (!w || !h) { w = 1000; h = 1000; }
+
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.round(w);
+      canvas.height = Math.round(h);
+      var ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const png = canvas.toDataURL('image/png');
+
+      var png = canvas.toDataURL('image/png');
       triggerDownload(png, 'logo_colore.png');
       URL.revokeObjectURL(url);
     };
-    img.onerror = ()=> alert('Conversion PNG impossible (ressources externes ?).');
+    img.onerror = function(){ alert('Conversion PNG impossible.'); };
     img.src = url;
   }
 
-  // Export SVG
-  function downloadSVG(){
-    const clone = svgEl.cloneNode(true);
-    clone.querySelectorAll('.dot').forEach(el=> el.classList.remove('dot','hover'));
-    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
-    const blob = new Blob([xml], {type:'image/svg+xml;charset=utf-8'});
-    const url  = URL.createObjectURL(blob);
+  function downloadSVG() {
+    var clone = svgEl.cloneNode(true);
+    var dots = clone.querySelectorAll('.dot');
+    for (var i = 0; i < dots.length; i++) dots[i].classList.remove('dot','hover');
+    var xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    var blob = new Blob([xml], {type:'image/svg+xml;charset=utf-8'});
+    var url  = URL.createObjectURL(blob);
     triggerDownload(url, 'logo_colore.svg', true);
     URL.revokeObjectURL(url);
   }
 
-  function triggerDownload(href, filename){
-    const a = document.createElement('a');
+  function triggerDownload(href, filename) {
+    var a = document.createElement('a');
     a.href = href; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  function attach(){
+  function attach() {
     snapshotOriginal();
     flagDots();
     svgEl.addEventListener('click', onDotToggle);
-    document.getElementById('reset').addEventListener('click', resetAll);
-    document.getElementById('save-png').addEventListener('click', downloadPNG);
-    document.getElementById('save-svg').addEventListener('click', downloadSVG);
-  }
-  attach();
-})();
-</script>
+    var btnReset = document.getElementById('reset');
+    var btnPng   = document.getElementById('save-png');
+    var btnSvg   = document.getElementById('save-svg');
+    if (btnReset) btnReset.addEventListener('click', resetAll);
+    if (btnPng)   btnPng.addEventListener('click', downloadPNG);
+    if (btnSvg)   btnSvg.addEventListener('click', downloadSVG);
 
+    // Assurance : autoriser les interactions sur les éléments ciblés
+    var style = document.createElement('style');
+    style.textContent = 'svg .dot{cursor:pointer;pointer-events:all}';
+    document.head.appendChild(style);
+  }
+
+  attach();
+});
+</script>
 </body>
 </html>
