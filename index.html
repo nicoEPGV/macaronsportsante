@@ -145,7 +145,6 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Export PNG
-<script>
 // utilitaire: conversion couleur CSS -> #rrggbb
 function __toHex(c){ var cv=document.createElement('canvas').getContext('2d'); cv.fillStyle=c||''; return cv.fillStyle.toLowerCase(); }
 
@@ -226,7 +225,6 @@ function downloadPNG(){
   img.onerror = function(){ alert('Conversion PNG impossible.'); };
   img.src = url;
 }
-</script>
   // Export JPG
 function downloadJPG(){
   // On part du SVG courant, on rasterise sur Canvas puis on exporte en JPEG
@@ -307,6 +305,7 @@ function downloadJPG(){
 </body>
 
 </html>
+
 
 
 
