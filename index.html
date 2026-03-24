@@ -16,6 +16,7 @@
   svg .dot{cursor:pointer; pointer-events: all;}
   .hint{color:#666;font-size:13px;margin-top:6px}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>  
 </head>
 <body>
 
@@ -42,6 +43,7 @@
   <button id="save-png">Télécharger PNG</button>
   <button id="save-jpg">Télécharger JPG</button>
   <button id="save-svg">Télécharger SVG</button>
+  <button id="save-zip">Télécharger ZIP (PNG+JPG)</button>
 </div>
 
 <div id="stage">
@@ -325,12 +327,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var btnPng   = document.getElementById('save-png');
     var btnJpg   = document.getElementById('save-jpg');
     var btnSvg   = document.getElementById('save-svg');
+    var btnZip   = document.getElementById('save-zip');
     var selExp   = document.getElementById('export-color');
 
     if (btnReset) btnReset.addEventListener('click', resetAll);
     if (btnPng)   btnPng.addEventListener('click', downloadPNG);
     if (btnJpg)   btnJpg.addEventListener('click', downloadJPG);
     if (btnSvg)   btnSvg.addEventListener('click', downloadSVG);
+    if (btnZip) btnZip.addEventListener('click', downloadZIP);
 
     if (selExp){
       EXPORT_COLOR = toHex(selExp.value);
@@ -345,7 +349,63 @@ document.addEventListener('DOMContentLoaded', function () {
     style.textContent = 'svg .dot{cursor:pointer;pointer-events:all}';
     document.head.appendChild(style);
   }
+  
+// --- Export ZIP (PNG + JPG) ---
+async function downloadZIP() {
+    // 1. On génère un clone du SVG pour export (comme PNG/JPG)
+    var clone = svgEl.cloneNode(true);
+    recolorCloneForExport(clone, EXPORT_COLOR);
 
+    // 2. Préparation des données SVG
+    var data = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+               new XMLSerializer().serializeToString(clone);
+    var svgBlob = new Blob([data], { type: 'image/svg+xml;charset=utf-8' });
+    var svgURL = URL.createObjectURL(svgBlob);
+
+    // 3. Charger le SVG dans une image
+    var img = new Image();
+    img.src = svgURL;
+
+    img.onload = async function () {
+        // récupérer dimensions
+        var w = svgEl.width?.baseVal?.value || 1000;
+        var h = svgEl.height?.baseVal?.value || 1000;
+        
+        // canvas commun
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d');
+
+        // ---------------- PNG ----------------
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        var pngData = canvas.toDataURL('image/png');
+
+        // ---------------- JPG ----------------
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        var jpgData = canvas.toDataURL('image/jpeg', 0.92);
+
+        // 4. Création du ZIP
+        var zip = new JSZip();
+        zip.file("image.png", pngData.split(",")[1], { base64: true });
+        zip.file("image.jpg", jpgData.split(",")[1], { base64: true });
+
+        // 5. Génération du ZIP
+        var content = await zip.generateAsync({ type: "blob" });
+
+        // 6. Téléchargement du ZIP
+        triggerDownload(URL.createObjectURL(content), "export_macaron.zip");
+        URL.revokeObjectURL(svgURL);
+    };
+
+    img.onerror = function () {
+        alert("Erreur lors du traitement de l'image.");
+    };
+}
+  
   attach();
 });
 </script>
