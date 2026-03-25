@@ -351,77 +351,90 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   
 // --- Export ZIP (PNG + JPG) ---
+// Version 100% fonctionnelle avec TON HTML / TON SVG
 async function downloadZIP() {
-    // 1. On génère un clone du SVG pour export (comme PNG/JPG)
-    var clone = svgEl.cloneNode(true);
-    recolorCloneForExport(clone, EXPORT_COLOR);
 
-    // 2. Préparation des données SVG
-    var data = '<?xml version="1.0" encoding="UTF-8"?>\n' +
-               new XMLSerializer().serializeToString(clone);
-    var svgBlob = new Blob([data], { type: 'image/svg+xml;charset=utf-8' });
-    var svgURL = URL.createObjectURL(svgBlob);
+    // === 1. Générer le PNG (transparent si coché) ===
+    const pngPromise = new Promise((resolve) => {
+        let clone = svgEl.cloneNode(true);
+        recolorCloneForExport(clone, EXPORT_COLOR);
+        stripWhiteBackgroundRects(clone);
 
-    // 3. Charger le SVG dans une image
-    var img = new Image();
-    img.src = svgURL;
+        const data = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                     new XMLSerializer().serializeToString(clone);
+        const blob = new Blob([data], { type: "image/svg+xml;charset=utf-8" });
+        const url  = URL.createObjectURL(blob);
 
-    img.onload = async function () {
-        // récupérer dimensions
-        var w = svgEl.width?.baseVal?.value || 1000;
-        var h = svgEl.height?.baseVal?.value || 1000;
-        
-        // canvas commun
-        var canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        var ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = function() {
+            let w = svgEl.width?.baseVal?.value || 1000;
+            let h = svgEl.height?.baseVal?.value || 1000;
 
-       // ---------------- PNG TRANSPARENT ----------------
+            let canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            let ctx = canvas.getContext("2d");
 
-// On clone à nouveau le SVG, mais cette fois on supprime le fond blanc
-var clonePng = svgEl.cloneNode(true);
-recolorCloneForExport(clonePng, EXPORT_COLOR);
-stripWhiteBackgroundRects(clonePng); // ⬅️ rend le PNG transparent
+            ctx.clearRect(0,0,w,h);
+            ctx.drawImage(img, 0, 0, w, h);
 
-var dataPng = '<?xml version="1.0" encoding="UTF-8"?>\n' +
-              new XMLSerializer().serializeToString(clonePng);
+            let pngData = canvas.toDataURL("image/png");
+            resolve(pngData);
 
-var blobPng = new Blob([dataPng], { type: 'image/svg+xml;charset=utf-8' });
-var urlPng  = URL.createObjectURL(blobPng);
+            URL.revokeObjectURL(url);
+        };
+        img.src = url;
+    });
 
-var imgPng = new Image();
-imgPng.onload = function () {
 
-    ctx.clearRect(0, 0, w, h);
-    ctx.drawImage(imgPng, 0, 0, w, h);
+    // === 2. Générer le JPG (fond blanc) ===
+    const jpgPromise = new Promise((resolve) => {
 
-    var pngData = canvas.toDataURL('image/png');
+        let clone = svgEl.cloneNode(true);
+        recolorCloneForExport(clone, EXPORT_COLOR);
 
-    zip.file("image.png", pngData.split(",")[1], { base64: true });
+        const data = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                     new XMLSerializer().serializeToString(clone);
 
-    URL.revokeObjectURL(urlPng);
-};
-imgPng.src = urlPng;
+        const blob = new Blob([data], { type: "image/svg+xml;charset=utf-8" });
+        const url  = URL.createObjectURL(blob);
 
-        // ---------------- JPG ----------------
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        var jpgData = canvas.toDataURL('image/jpeg', 0.92);
+        const img = new Image();
+        img.onload = function() {
+            let w = svgEl.width?.baseVal?.value || 1000;
+            let h = svgEl.height?.baseVal?.value || 1000;
 
-        // 4. Création du ZIP
-        var zip = new JSZip();
-        zip.file("image.png", pngData.split(",")[1], { base64: true });
-        zip.file("image.jpg", jpgData.split(",")[1], { base64: true });
+            let canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            let ctx = canvas.getContext("2d");
 
-        // 5. Génération du ZIP
-        var content = await zip.generateAsync({ type: "blob" });
+            ctx.fillStyle = "#ffffff"; // fond JPG
+            ctx.fillRect(0,0,w,h);
+            ctx.drawImage(img, 0, 0, w, h);
 
-        // 6. Téléchargement du ZIP
-        triggerDownload(URL.createObjectURL(content), "export_macaron.zip");
-        URL.revokeObjectURL(svgURL);
-    };
+            let jpgData = canvas.toDataURL("image/jpeg", 0.92);
+            resolve(jpgData);
+
+            URL.revokeObjectURL(url);
+        };
+        img.src = url;
+    });
+
+
+    // === 3. Attendre PNG + JPG ===
+    const [pngData, jpgData] = await Promise.all([pngPromise, jpgPromise]);
+
+    // === 4. Générer ZIP ===
+    const zip = new JSZip();
+    zip.file("macaron.png", pngData.split(',')[1], { base64: true });
+    zip.file("macaron.jpg", jpgData.split(',')[1], { base64: true });
+
+    const content = await zip.generateAsync({ type: "blob" });
+
+    // === 5. Télécharger ===
+    triggerDownload(URL.createObjectURL(content), "export_macaron.zip");
+}
 
     img.onerror = function () {
         alert("Erreur lors du traitement de l'image.");
