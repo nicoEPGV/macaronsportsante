@@ -377,10 +377,32 @@ async function downloadZIP() {
         canvas.height = h;
         var ctx = canvas.getContext('2d');
 
-        // ---------------- PNG ----------------
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        var pngData = canvas.toDataURL('image/png');
+       // ---------------- PNG TRANSPARENT ----------------
+
+// On clone à nouveau le SVG, mais cette fois on supprime le fond blanc
+var clonePng = svgEl.cloneNode(true);
+recolorCloneForExport(clonePng, EXPORT_COLOR);
+stripWhiteBackgroundRects(clonePng); // ⬅️ rend le PNG transparent
+
+var dataPng = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+              new XMLSerializer().serializeToString(clonePng);
+
+var blobPng = new Blob([dataPng], { type: 'image/svg+xml;charset=utf-8' });
+var urlPng  = URL.createObjectURL(blobPng);
+
+var imgPng = new Image();
+imgPng.onload = function () {
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(imgPng, 0, 0, w, h);
+
+    var pngData = canvas.toDataURL('image/png');
+
+    zip.file("image.png", pngData.split(",")[1], { base64: true });
+
+    URL.revokeObjectURL(urlPng);
+};
+imgPng.src = urlPng;
 
         // ---------------- JPG ----------------
         ctx.fillStyle = "#ffffff";
