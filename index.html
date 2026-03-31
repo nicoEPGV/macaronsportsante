@@ -47,7 +47,7 @@
 
 
 <!-- Lib ZIP -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip.min.js
+https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
 
 </head>
 <body>
@@ -88,22 +88,16 @@
 </div>
 
 
-<!-- =============================== -->
-<!--            SCRIPT JS            -->
-<!-- =============================== -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jsscript>
+
+<!-- Script principal -->
+<script>
 document.addEventListener("DOMContentLoaded", function () {
-    ...
-});
-</script>
 
-
-  // On attend que le navigateur ait fini de parser le SVG entièrement
+  // On attend que le navigateur ait tout chargé
   requestAnimationFrame(() => {
     const stage = document.getElementById("stage");
     let svgEl = stage.querySelector("svg");
 
-    // Si le SVG n’est pas encore prêt, on REFait une passe :
     if (!svgEl) {
       const observer = new MutationObserver(() => {
         svgEl = stage.querySelector("svg");
@@ -119,19 +113,15 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   function init(svgEl) {
-    console.log("SVG chargé, init OK");
+    console.log("SVG chargé");
 
     const FILL_ON = "#473AA5";
     const FILL_OFF = "none";
     const THEME = "#473AA5";
-    const ALLOWED_COLORS = ["#473AA5","#919CFF","#B9009D","#FF0C6A","#FF9400"];
-    let EXPORT_COLOR = "#473AA5";
-
     const MIN_AREA = 80;
     const MAX_AREA = 12000;
-
-    let original = "";
-    original = new XMLSerializer().serializeToString(svgEl);
+    let EXPORT_COLOR = "#473AA5";
+    let original = new XMLSerializer().serializeToString(svgEl);
 
     function toHex(c){
       let ctx = document.createElement("canvas").getContext("2d");
@@ -156,15 +146,12 @@ document.addEventListener("DOMContentLoaded", function () {
           let stroke = node.getAttribute("stroke") || cs.stroke;
           let fill   = node.getAttribute("fill")   || cs.fill;
 
-          let thematic = (stroke && stroke!="none" && isTheme(stroke)) ||
-                         (fill && fill!="none" && isTheme(fill)) ||
-                         (!fill || fill=="none" || fill=="transparent");
+          let thematic = (stroke && stroke!="none" && isTheme(stroke))
+                      || (fill && fill!="none" && isTheme(fill))
+                      || (!fill || fill=="none" || fill=="transparent");
 
-          if(thematic){
-            node.classList.add("dot");
-          }
-
-        }catch(e){}
+          if(thematic) node.classList.add("dot");
+        } catch(e){}
       });
     }
 
@@ -186,7 +173,7 @@ document.addEventListener("DOMContentLoaded", function () {
       init(svgEl);
     }
 
-    // === EXPORTS (inchangés) ======================
+    // Export SVG
     function recolorExport(clone,color){
       let hex = toHex(color);
       clone.querySelectorAll("*").forEach(el=>{
@@ -197,49 +184,32 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
 
-    function stripWhite(clone){
-      clone.querySelectorAll("rect").forEach(r=>{
-        if (toHex(r.getAttribute("fill")) == "#ffffff") r.remove();
-      });
-    }
-
     function downloadSVG(){
       let clone = svgEl.cloneNode(true);
       recolorExport(clone, EXPORT_COLOR);
       clone.querySelectorAll(".dot").forEach(d=>d.removeAttribute("class"));
       let xml = new XMLSerializer().serializeToString(clone);
-      let blob = new Blob([xml],{type:"image/svg+xml"});
+      let blob = new Blob([xml], {type:"image/svg+xml"});
       let url = URL.createObjectURL(blob);
-
       let a=document.createElement("a");
       a.href=url;
       a.download="logo.svg";
-      document.body.appendChild(a);
       a.click();
-      a.remove();
     }
 
-    // PNG / JPG / ZIP restent identiques
-    // (je peux te mettre la version complète si tu veux)
-
-    // === ATTACH EVENTS ============================
     flagDots();
     svgEl.addEventListener("click", onToggle);
 
     document.getElementById("reset").onclick = resetAll;
     document.getElementById("save-svg").onclick = downloadSVG;
-    document.getElementById("save-png").onclick = () => alert("PNG OK (code identique — je te le remets si tu veux)");
-    document.getElementById("save-jpg").onclick = () => alert("JPG OK");
-    document.getElementById("save-zip").onclick = () => alert("ZIP OK");
 
-    // Palette export
-    document.getElementById("export-color").onchange = e => {
+    document.getElementById("export-color").onchange = e=>{
       EXPORT_COLOR = e.target.value;
     };
   }
-
 });
 </script>
+
 
 </body>
 </html>
